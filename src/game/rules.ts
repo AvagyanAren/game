@@ -8,6 +8,8 @@ export type RulesState = {
   score: number;
   elapsed: number;
   difficultyLevel: number;
+  /** Mint/coral rules and strike impulses — only after the first swing tap. */
+  hitsEnabled: boolean;
 };
 
 export function createRulesState(): RulesState {
@@ -16,11 +18,12 @@ export function createRulesState(): RulesState {
     score: 0,
     elapsed: 0,
     difficultyLevel: 0,
+    hitsEnabled: false,
   };
 }
 
 export function updateDifficulty(rules: RulesState, delta: number): number {
-  if (rules.phase !== 'playing') {
+  if (rules.phase !== 'playing' || !rules.hitsEnabled) {
     return 1;
   }
   rules.elapsed += delta;
@@ -77,7 +80,7 @@ export function resolveBallBlockStrike(
   onMintBreak: (block: BlockEntity) => void,
   onCoralHit: () => void,
 ): void {
-  if (rules.phase !== 'playing' || !block.alive) {
+  if (rules.phase !== 'playing' || !rules.hitsEnabled || !block.alive) {
     return;
   }
 

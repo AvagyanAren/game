@@ -15,6 +15,10 @@ export type BlockEntity = {
 export const BLOCK_HALF = new CANNON.Vec3(0.41, 0.21, 0.41);
 export const BLOCK_FULL_Y = BLOCK_HALF.y * 2;
 
+export const COLLISION_GROUP_BALL = 1;
+export const COLLISION_GROUP_BLOCK = 2;
+export const COLLISION_GROUP_STATIC = 4;
+
 const TOWER_LAYOUT: { x: number; kind: BlockKind; layers: number }[] = [
   { x: -0.35, kind: 'mint', layers: 8 },
   { x: 0.95, kind: 'mint', layers: 6 },
@@ -34,6 +38,8 @@ function createBlockBody(kind: BlockKind, position: CANNON.Vec3, materials: Phys
     sleepSpeedLimit: 0.35,
     sleepTimeLimit: 0.4,
     material: materials.block,
+    collisionFilterGroup: COLLISION_GROUP_BLOCK,
+    collisionFilterMask: COLLISION_GROUP_STATIC,
   });
   body.addShape(new CANNON.Box(BLOCK_HALF.clone()));
   body.position.copy(position);
@@ -72,6 +78,8 @@ export function createPedestalBodies(world: CANNON.World, materials: PhysicsMate
       mass: 0,
       type: CANNON.Body.STATIC,
       material: materials.platform,
+      collisionFilterGroup: COLLISION_GROUP_STATIC,
+      collisionFilterMask: COLLISION_GROUP_BLOCK | COLLISION_GROUP_BALL,
     });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.52, PEDESTAL_H * 0.5, 0.52)));
     body.position.set(tower.x, PLATFORM_TOP_Y + PEDESTAL_H * 0.5, 0);
@@ -83,4 +91,18 @@ export function createPedestalBodies(world: CANNON.World, materials: PhysicsMate
 
 export function getTowerLayout(): typeof TOWER_LAYOUT {
   return TOWER_LAYOUT;
+}
+
+export function setBlocksCollideWithBall(blocks: BlockEntity[], enabled: boolean): void {
+  for (const block of blocks) {
+    if (!block.alive) {
+      continue;
+    }
+    block.body.collisionFilterMask = enabled
+      ? COLLISION_GROUP_STATIC | COLLISION_GROUP_BALL
+      : COLLISION_GROUP_STATIC;
+    block.body.velocity.set(0, 0, 0);
+    block.body.angularVelocity.set(0, 0, 0);
+    block.body.wakeUp();
+  }
 }

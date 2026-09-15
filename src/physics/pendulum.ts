@@ -1,5 +1,10 @@
 import * as CANNON from 'cannon-es';
 import type { PhysicsMaterials } from './materials';
+import {
+  COLLISION_GROUP_BALL,
+  COLLISION_GROUP_BLOCK,
+  COLLISION_GROUP_STATIC,
+} from './blocks';
 
 export type PendulumPhysics = {
   anchorBody: CANNON.Body;
@@ -15,6 +20,8 @@ const ANCHOR_Y = 9.2;
 const ROPE_LENGTH = 7.45;
 const BALL_RADIUS = 0.72;
 const BALL_MASS = 11;
+/** Left of all towers at rest — avoids overlapping coral at x≈2.25 when rope is long. */
+const REST_START_X = -2.8;
 
 let swingMultiplier = 1;
 
@@ -45,11 +52,14 @@ export function createPendulum(world: CANNON.World, materials: PhysicsMaterials)
     angularDamping: 0.018,
     allowSleep: false,
     material: materials.ball,
+    collisionFilterGroup: COLLISION_GROUP_BALL,
+    collisionFilterMask: COLLISION_GROUP_STATIC,
   });
   ballBody.addShape(new CANNON.Sphere(BALL_RADIUS));
-  const startX = 2.8;
-  const startY = ANCHOR_Y - Math.sqrt(ROPE_LENGTH ** 2 - startX ** 2);
-  ballBody.position.set(startX, startY, 0);
+  const startY = ANCHOR_Y - Math.sqrt(ROPE_LENGTH ** 2 - REST_START_X ** 2);
+  ballBody.position.set(REST_START_X, startY, 0);
+  ballBody.velocity.set(0, 0, 0);
+  ballBody.angularVelocity.set(0, 0, 0);
   world.addBody(ballBody);
 
   const pivotB = new CANNON.Vec3();
@@ -63,8 +73,6 @@ export function createPendulum(world: CANNON.World, materials: PhysicsMaterials)
     maxForce: 1e7,
   });
   world.addConstraint(hinge);
-
-  ballBody.angularVelocity.set(0, 0, 2.1);
 
   return {
     anchorBody,
@@ -96,6 +104,12 @@ export function nudgeSwing(pendulum: PendulumPhysics, direction: -1 | 1): void {
 export function dampPendulum(pendulum: PendulumPhysics): void {
   pendulum.ballBody.velocity.set(0, 0, 0);
   pendulum.ballBody.angularVelocity.set(0, 0, 0);
+}
+
+export function setBallCollidesWithBlocks(pendulum: PendulumPhysics, enabled: boolean): void {
+  pendulum.ballBody.collisionFilterMask = enabled
+    ? COLLISION_GROUP_STATIC | COLLISION_GROUP_BLOCK
+    : COLLISION_GROUP_STATIC;
 }
 
 export function getAnchorWorldPosition(pendulum: PendulumPhysics, target: CANNON.Vec3): CANNON.Vec3 {

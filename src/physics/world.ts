@@ -1,5 +1,10 @@
 import * as CANNON from 'cannon-es';
 import {
+  COLLISION_GROUP_BALL,
+  COLLISION_GROUP_BLOCK,
+  COLLISION_GROUP_STATIC,
+} from './blocks';
+import {
   createPhysicsMaterials,
   registerContactMaterials,
   type PhysicsMaterials,
@@ -38,6 +43,8 @@ export function createPlatformBody(materials: PhysicsMaterials): CANNON.Body {
     mass: 0,
     type: CANNON.Body.STATIC,
     material: materials.platform,
+    collisionFilterGroup: COLLISION_GROUP_STATIC,
+    collisionFilterMask: COLLISION_GROUP_BLOCK | COLLISION_GROUP_BALL,
   });
   body.addShape(shape);
   body.position.set(0, -0.45, 0);

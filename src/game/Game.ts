@@ -7,9 +7,15 @@ import {
   dampPendulum,
   nudgeSwing,
   resetPendulumState,
+  setBallCollidesWithBlocks,
   setSwingMultiplier,
 } from '../physics/pendulum';
-import { createPedestalBodies, createTowerBlocks, type BlockEntity } from '../physics/blocks';
+import {
+  createPedestalBodies,
+  createTowerBlocks,
+  setBlocksCollideWithBall,
+  type BlockEntity,
+} from '../physics/blocks';
 import { createEnvironment, createCamera } from './environment';
 import { createPendulumView, syncPendulumView } from './pendulumView';
 import { bindSwingControls } from './controls';
@@ -87,6 +93,7 @@ export class Game {
     this.world.addBody(createPlatformBody(this.physicsMaterials));
     this.scene.add(this.pendulumView.root);
     this.spawnCity();
+    this.disarmHits();
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -114,8 +121,24 @@ export class Game {
       if (this.rules.phase !== 'playing') {
         return;
       }
+      this.armHits();
       nudgeSwing(this.pendulum, direction);
     });
+  }
+
+  private disarmHits(): void {
+    this.rules.hitsEnabled = false;
+    setBallCollidesWithBlocks(this.pendulum, false);
+    setBlocksCollideWithBall(this.blocks, false);
+  }
+
+  private armHits(): void {
+    if (this.rules.hitsEnabled) {
+      return;
+    }
+    this.rules.hitsEnabled = true;
+    setBallCollidesWithBlocks(this.pendulum, true);
+    setBlocksCollideWithBall(this.blocks, true);
   }
 
   private spawnCity(): void {
@@ -155,13 +178,16 @@ export class Game {
     resetPendulumState(this.pendulum, this.world, this.physicsMaterials);
     this.clearCity();
     this.spawnCity();
+    this.disarmHits();
+    this.ballPrevPosition.copy(this.pendulum.ballBody.position);
+    this.accumulator = 0;
     this.scorePill.setScore(0);
     this.scorePill.root.hidden = false;
     this.bindControls();
   }
 
   private detectAndResolveBallBlockHits(from: CANNON.Vec3, to: CANNON.Vec3): void {
-    if (this.rules.phase !== 'playing') {
+    if (this.rules.phase !== 'playing' || !this.rules.hitsEnabled) {
       return;
     }
 
@@ -194,6 +220,9 @@ export class Game {
 
   /** Cannon beginContact (backup); primary hits use swept sphere vs block each substep. */
   private onBeginContactDebug = (event: { bodyA: CANNON.Body; bodyB: CANNON.Body }): void => {
+    if (!this.rules.hitsEnabled) {
+      return;
+    }
     handleBlockContact(
       this.rules,
       event,
