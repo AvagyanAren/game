@@ -31,6 +31,48 @@ export function sphereIntersectsBlock(
   return _scratch.lengthSquared() <= ballRadius * ballRadius;
 }
 
+/** Eject ball from an overlapping block so Cannon contacts can take over. */
+export function separateBallFromBlock(
+  ballBody: CANNON.Body,
+  ballRadius: number,
+  blockBody: CANNON.Body,
+  halfExtents: CANNON.Vec3 = BLOCK_HALF,
+): void {
+  _invQuat.copy(blockBody.quaternion);
+  _invQuat.conjugate(_invQuat);
+
+  _ballLocal.copy(ballBody.position);
+  _ballLocal.vsub(blockBody.position, _ballLocal);
+  _invQuat.vmult(_ballLocal, _ballLocal);
+
+  _closest.set(
+    clamp(_ballLocal.x, -halfExtents.x, halfExtents.x),
+    clamp(_ballLocal.y, -halfExtents.y, halfExtents.y),
+    clamp(_ballLocal.z, -halfExtents.z, halfExtents.z),
+  );
+
+  _scratch.copy(_ballLocal);
+  _scratch.vsub(_closest, _scratch);
+  const distSq = _scratch.lengthSquared();
+  const pen = ballRadius - Math.sqrt(distSq);
+  if (pen <= 0.001) {
+    return;
+  }
+
+  if (distSq < 1e-8) {
+    _scratch.set(0, 1, 0);
+  } else {
+    _scratch.normalize();
+  }
+
+  blockBody.quaternion.vmult(_scratch, _scratch);
+
+  ballBody.position.x += _scratch.x * (pen + 0.04);
+  ballBody.position.y += _scratch.y * (pen + 0.04);
+  ballBody.position.z += _scratch.z * (pen + 0.04);
+  ballBody.wakeUp();
+}
+
 export type BallBlockHit = {
   block: BlockEntity;
   relSpeed: number;

@@ -25,6 +25,7 @@ import {
   createRulesState,
   handleBlockContact,
   resolveBallBlockStrike,
+  strikeSpeedForHit,
   updateDifficulty,
   wakeUpperBlocks,
   type RulesState,
@@ -32,6 +33,7 @@ import {
 import {
   applyBallStrikeImpulse,
   findBallBlockHits,
+  separateBallFromBlock,
 } from '../physics/ballBlockHits';
 import { flashHitDebug } from '../ui/hitFlash';
 import type { GameOverOverlay, ScorePill } from '../ui';
@@ -55,7 +57,7 @@ import {
 } from './debugApi';
 
 const PHYSICS_STEP = 1 / 240;
-const SWEEP_STEPS = 10;
+const SWEEP_STEPS = 18;
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -241,13 +243,14 @@ export class Game {
     );
 
     for (const { block, relSpeed } of hits) {
+      separateBallFromBlock(ballBody, ballRadius, block.body);
       applyBallStrikeImpulse(ballBody, block.body);
       flashHitDebug(block.kind === 'coral' ? 'coral' : 'mint');
       resolveBallBlockStrike(
         this.rules,
         this.blocks,
         block,
-        relSpeed,
+        strikeSpeedForHit(ballBody, relSpeed),
         (b) => this.breakMintBlock(b),
         () => this.triggerGameOver(),
       );

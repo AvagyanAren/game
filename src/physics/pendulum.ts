@@ -53,7 +53,7 @@ export function createPendulum(world: CANNON.World, materials: PhysicsMaterials)
     allowSleep: false,
     material: materials.ball,
     collisionFilterGroup: COLLISION_GROUP_BALL,
-    collisionFilterMask: COLLISION_GROUP_STATIC,
+    collisionFilterMask: COLLISION_GROUP_STATIC | COLLISION_GROUP_BLOCK,
   });
   ballBody.addShape(new CANNON.Sphere(BALL_RADIUS));
   const startY = ANCHOR_Y - Math.sqrt(ROPE_LENGTH ** 2 - REST_START_X ** 2);
@@ -106,10 +106,9 @@ export function dampPendulum(pendulum: PendulumPhysics): void {
   pendulum.ballBody.angularVelocity.set(0, 0, 0);
 }
 
-export function setBallCollidesWithBlocks(pendulum: PendulumPhysics, enabled: boolean): void {
-  pendulum.ballBody.collisionFilterMask = enabled
-    ? COLLISION_GROUP_STATIC | COLLISION_GROUP_BLOCK
-    : COLLISION_GROUP_STATIC;
+/** Gameplay scoring is gated separately; ball always collides with tower blocks. */
+export function setBallCollidesWithBlocks(_pendulum: PendulumPhysics, _enabled: boolean): void {
+  /* no-op — keep filter mask including COLLISION_GROUP_BLOCK at all times */
 }
 
 export function getAnchorWorldPosition(pendulum: PendulumPhysics, target: CANNON.Vec3): CANNON.Vec3 {

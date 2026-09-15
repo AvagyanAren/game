@@ -69,7 +69,14 @@ export function handleBlockContact(
 
   const relative = new CANNON.Vec3();
   ballBody.velocity.vsub(block.body.velocity, relative);
-  resolveBallBlockStrike(rules, blocks, block, relative.length(), onMintBreak, onCoralHit);
+  resolveBallBlockStrike(
+    rules,
+    blocks,
+    block,
+    strikeSpeedForHit(ballBody, relative.length()),
+    onMintBreak,
+    onCoralHit,
+  );
 }
 
 export function resolveBallBlockStrike(
@@ -86,15 +93,20 @@ export function resolveBallBlockStrike(
 
   wakeTowerBlocks(blocks, block);
 
-  if (relSpeed < 0.85) {
-    return;
-  }
   if (block.kind === 'coral') {
     onCoralHit();
     return;
   }
 
+  if (relSpeed < 0.35) {
+    return;
+  }
+
   onMintBreak(block);
+}
+
+export function strikeSpeedForHit(ballBody: CANNON.Body, relSpeed: number): number {
+  return Math.max(relSpeed, ballBody.velocity.length());
 }
 
 export function wakeTowerBlocks(blocks: BlockEntity[], struck: BlockEntity): void {

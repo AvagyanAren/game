@@ -29,8 +29,9 @@ const TOWER_LAYOUT: { x: number; kind: BlockKind; layers: number }[] = [
 const PEDESTAL_H = 0.07;
 const PLATFORM_TOP_Y = 0;
 
-const BLOCK_MASK_STACKED =
-  COLLISION_GROUP_STATIC | COLLISION_GROUP_BLOCK;
+const BLOCK_MASK_STACKED = COLLISION_GROUP_STATIC | COLLISION_GROUP_BLOCK;
+/** Ball always collides with blocks physically; gameplay rules stay gated until first tap. */
+const BLOCK_MASK_WITH_BALL = BLOCK_MASK_STACKED | COLLISION_GROUP_BALL;
 
 function createBlockBody(kind: BlockKind, position: CANNON.Vec3, materials: PhysicsMaterials): CANNON.Body {
   const body = new CANNON.Body({
@@ -42,7 +43,7 @@ function createBlockBody(kind: BlockKind, position: CANNON.Vec3, materials: Phys
     sleepTimeLimit: 0.4,
     material: materials.block,
     collisionFilterGroup: COLLISION_GROUP_BLOCK,
-    collisionFilterMask: BLOCK_MASK_STACKED,
+    collisionFilterMask: BLOCK_MASK_WITH_BALL,
     type: CANNON.Body.STATIC,
   });
   body.addShape(new CANNON.Box(BLOCK_HALF.clone()));
@@ -115,20 +116,19 @@ export function getTowerLayout(): typeof TOWER_LAYOUT {
   return TOWER_LAYOUT;
 }
 
-/** Calm start: static upright stacks, block↔block + static; ball off. Play: dynamic + ball. */
+/** Calm start: static upright stacks. Play: dynamic bodies; ball collision always on. */
 export function setBlocksCollideWithBall(blocks: BlockEntity[], enabled: boolean): void {
   for (const block of blocks) {
     if (!block.alive) {
       continue;
     }
+    block.body.collisionFilterMask = BLOCK_MASK_WITH_BALL;
     if (enabled) {
       block.body.type = CANNON.Body.DYNAMIC;
-      block.body.collisionFilterMask = BLOCK_MASK_STACKED | COLLISION_GROUP_BALL;
       block.body.wakeUp();
     } else {
       resetBlockToTowerPose(block);
       block.body.type = CANNON.Body.STATIC;
-      block.body.collisionFilterMask = BLOCK_MASK_STACKED;
     }
   }
 }
