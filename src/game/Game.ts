@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { createPhysicsWorld, createPlatformBody } from '../physics/world';
+import type { PhysicsMaterials } from '../physics/materials';
 import {
   createPendulum,
   dampPendulum,
@@ -35,16 +36,17 @@ import {
   showGameOverInterstitial,
 } from '../yandex';
 
-const FIXED_STEP = 1 / 60;
-const MAX_SUBSTEPS = 3;
+const PHYSICS_STEP = 1 / 120;
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly clock = new THREE.Clock();
-  private readonly world = createPhysicsWorld();
-  private readonly pendulum = createPendulum(this.world);
+  private readonly physics = createPhysicsWorld();
+  private readonly world = this.physics.world;
+  private readonly physicsMaterials: PhysicsMaterials = this.physics.materials;
+  private readonly pendulum = createPendulum(this.world, this.physicsMaterials);
   private readonly pendulumView = createPendulumView(this.pendulum);
   private readonly rules: RulesState = createRulesState();
   private readonly scorePill: ScorePill;
@@ -73,7 +75,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = createCamera();
     createEnvironment(this.scene);
-    this.world.addBody(createPlatformBody());
+    this.world.addBody(createPlatformBody(this.physicsMaterials));
     this.scene.add(this.pendulumView.root);
     this.spawnCity();
 
@@ -107,8 +109,8 @@ export class Game {
   }
 
   private spawnCity(): void {
-    this.blocks = createTowerBlocks(this.world);
-    this.pedestalBodies = createPedestalBodies(this.world);
+    this.blocks = createTowerBlocks(this.world, this.physicsMaterials);
+    this.pedestalBodies = createPedestalBodies(this.world, this.physicsMaterials);
     this.blockByBody.clear();
     for (const block of this.blocks) {
       this.blockByBody.set(block.body, block);
@@ -140,7 +142,7 @@ export class Game {
     notifyGameplayStart();
     Object.assign(this.rules, createRulesState());
     setSwingMultiplier(1);
-    resetPendulumState(this.pendulum, this.world);
+    resetPendulumState(this.pendulum, this.world, this.physicsMaterials);
     this.clearCity();
     this.spawnCity();
     this.scorePill.setScore(0);
@@ -153,6 +155,7 @@ export class Game {
       this.rules,
       event,
       this.pendulum.ballBody,
+      this.blocks,
       this.blockByBody,
       (block) => this.breakMintBlock(block),
       () => this.triggerGameOver(),
@@ -231,9 +234,9 @@ export class Game {
       dampPendulum(this.pendulum);
     }
 
-    while (this.accumulator >= FIXED_STEP) {
-      this.world.step(FIXED_STEP, FIXED_STEP, MAX_SUBSTEPS);
-      this.accumulator -= FIXED_STEP;
+    while (this.accumulator >= PHYSICS_STEP) {
+      this.world.step(PHYSICS_STEP);
+      this.accumulator -= PHYSICS_STEP;
     }
 
     this.syncScene();

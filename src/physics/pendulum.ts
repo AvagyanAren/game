@@ -1,4 +1,5 @@
 import * as CANNON from 'cannon-es';
+import type { PhysicsMaterials } from './materials';
 
 export type PendulumPhysics = {
   anchorBody: CANNON.Body;
@@ -12,7 +13,7 @@ export type PendulumPhysics = {
 const ANCHOR_Y = 9.2;
 const ROPE_LENGTH = 5.4;
 const BALL_RADIUS = 0.72;
-const BALL_MASS = 9;
+const BALL_MASS = 11;
 
 let swingMultiplier = 1;
 
@@ -20,22 +21,29 @@ export function setSwingMultiplier(value: number): void {
   swingMultiplier = value;
 }
 
-export function resetPendulumState(pendulum: PendulumPhysics, world: CANNON.World): void {
+export function resetPendulumState(
+  pendulum: PendulumPhysics,
+  world: CANNON.World,
+  materials: PhysicsMaterials,
+): void {
   world.removeConstraint(pendulum.hinge);
   world.removeBody(pendulum.ballBody);
   world.removeBody(pendulum.anchorBody);
-  const fresh = createPendulum(world);
+  const fresh = createPendulum(world, materials);
   Object.assign(pendulum, fresh);
 }
 
-export function createPendulum(world: CANNON.World): PendulumPhysics {
-  const anchorBody = new CANNON.Body({ mass: 0 });
-  anchorBody.position.set(0, ANCHOR_Y, 0);  world.addBody(anchorBody);
+export function createPendulum(world: CANNON.World, materials: PhysicsMaterials): PendulumPhysics {
+  const anchorBody = new CANNON.Body({ mass: 0, type: CANNON.Body.STATIC });
+  anchorBody.position.set(0, ANCHOR_Y, 0);
+  world.addBody(anchorBody);
 
   const ballBody = new CANNON.Body({
     mass: BALL_MASS,
-    linearDamping: 0.015,
-    angularDamping: 0.02,
+    linearDamping: 0.012,
+    angularDamping: 0.018,
+    allowSleep: false,
+    material: materials.ball,
   });
   ballBody.addShape(new CANNON.Sphere(BALL_RADIUS));
   const startX = 2.8;
@@ -47,7 +55,8 @@ export function createPendulum(world: CANNON.World): PendulumPhysics {
   anchorBody.position.vsub(ballBody.position, pivotB);
 
   const hinge = new CANNON.HingeConstraint(anchorBody, ballBody, {
-    pivotA: new CANNON.Vec3(0, 0, 0),    pivotB,
+    pivotA: new CANNON.Vec3(0, 0, 0),
+    pivotB,
     axisA: new CANNON.Vec3(0, 0, 1),
     axisB: new CANNON.Vec3(0, 0, 1),
     maxForce: 1e7,

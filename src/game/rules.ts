@@ -40,10 +40,12 @@ export function handleBlockContact(
   rules: RulesState,
   event: ContactPayload,
   ballBody: CANNON.Body,
+  blocks: BlockEntity[],
   blockByBody: Map<CANNON.Body, BlockEntity>,
   onMintBreak: (block: BlockEntity) => void,
   onCoralHit: () => void,
-): void {  if (rules.phase !== 'playing') {
+): void {
+  if (rules.phase !== 'playing') {
     return;
   }
 
@@ -65,7 +67,10 @@ export function handleBlockContact(
   const relative = new CANNON.Vec3();
   ballBody.velocity.vsub(block.body.velocity, relative);
   const relSpeed = relative.length();
-  if (relSpeed < 1.4) {
+
+  wakeTowerBlocks(blocks, block);
+
+  if (relSpeed < 1.2) {
     return;
   }
   if (block.kind === 'coral') {
@@ -74,6 +79,22 @@ export function handleBlockContact(
   }
 
   onMintBreak(block);
+}
+
+export function wakeTowerBlocks(blocks: BlockEntity[], struck: BlockEntity): void {
+  for (const block of blocks) {
+    if (!block.alive) {
+      continue;
+    }
+    if (block.towerIndex !== struck.towerIndex) {
+      continue;
+    }
+    block.body.wakeUp();
+    if (block.layer >= struck.layer - 1) {
+      block.body.angularVelocity.x += (Math.random() - 0.5) * 0.6;
+      block.body.angularVelocity.z += (Math.random() - 0.5) * 0.6;
+    }
+  }
 }
 
 export function wakeUpperBlocks(blocks: BlockEntity[], removed: BlockEntity): void {

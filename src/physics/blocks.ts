@@ -1,4 +1,5 @@
 import * as CANNON from 'cannon-es';
+import type { PhysicsMaterials } from './materials';
 
 export type BlockKind = 'mint' | 'coral';
 
@@ -24,18 +25,22 @@ const TOWER_LAYOUT: { x: number; kind: BlockKind; layers: number }[] = [
 const PEDESTAL_H = 0.07;
 const PLATFORM_TOP_Y = 0;
 
-function createBlockBody(kind: BlockKind, position: CANNON.Vec3): CANNON.Body {
+function createBlockBody(kind: BlockKind, position: CANNON.Vec3, materials: PhysicsMaterials): CANNON.Body {
   const body = new CANNON.Body({
-    mass: kind === 'mint' ? 0.55 : 0.65,
-    linearDamping: 0.08,
-    angularDamping: 0.35,
+    mass: kind === 'mint' ? 0.62 : 0.72,
+    linearDamping: 0.06,
+    angularDamping: 0.22,
     allowSleep: true,
+    sleepSpeedLimit: 0.35,
+    sleepTimeLimit: 0.4,
+    material: materials.block,
   });
   body.addShape(new CANNON.Box(BLOCK_HALF.clone()));
   body.position.copy(position);
   return body;
 }
-export function createTowerBlocks(world: CANNON.World): BlockEntity[] {
+
+export function createTowerBlocks(world: CANNON.World, materials: PhysicsMaterials): BlockEntity[] {
   const blocks: BlockEntity[] = [];
   let idCounter = 0;
 
@@ -44,7 +49,7 @@ export function createTowerBlocks(world: CANNON.World): BlockEntity[] {
     for (let layer = 0; layer < tower.layers; layer += 1) {
       const y = baseY + layer * BLOCK_FULL_Y;
       const position = new CANNON.Vec3(tower.x, y, 0);
-      const body = createBlockBody(tower.kind, position);
+      const body = createBlockBody(tower.kind, position, materials);
       world.addBody(body);
       blocks.push({
         id: `b-${idCounter++}`,
@@ -60,10 +65,14 @@ export function createTowerBlocks(world: CANNON.World): BlockEntity[] {
   return blocks;
 }
 
-export function createPedestalBodies(world: CANNON.World): CANNON.Body[] {
+export function createPedestalBodies(world: CANNON.World, materials: PhysicsMaterials): CANNON.Body[] {
   const bodies: CANNON.Body[] = [];
   for (const tower of TOWER_LAYOUT) {
-    const body = new CANNON.Body({ mass: 0 });
+    const body = new CANNON.Body({
+      mass: 0,
+      type: CANNON.Body.STATIC,
+      material: materials.platform,
+    });
     body.addShape(new CANNON.Box(new CANNON.Vec3(0.52, PEDESTAL_H * 0.5, 0.52)));
     body.position.set(tower.x, PLATFORM_TOP_Y + PEDESTAL_H * 0.5, 0);
     world.addBody(body);
