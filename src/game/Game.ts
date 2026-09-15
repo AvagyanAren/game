@@ -17,10 +17,16 @@ import { createCityView, removeBlockMesh, syncCityView, type CityView } from './
 import {
   createRulesState,
   handleBlockContact,
+  resolveBallBlockStrike,
   updateDifficulty,
   wakeUpperBlocks,
   type RulesState,
 } from './rules';
+import {
+  applyBallStrikeImpulse,
+  findBallBlockHits,
+} from '../physics/ballBlockHits';
+import { flashHitDebug } from '../ui/hitFlash';
 import type { GameOverOverlay, ScorePill } from '../ui';
 import {
   createGameOverOverlay,
@@ -36,7 +42,8 @@ import {
   showGameOverInterstitial,
 } from '../yandex';
 
-const PHYSICS_STEP = 1 / 120;
+const PHYSICS_STEP = 1 / 240;
+const SWEEP_STEPS = 10;
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -60,6 +67,8 @@ export class Game {
   private rafId = 0;
   private accumulator = 0;
   private bestScore = loadBestScore();
+  private readonly ballPrevPosition = new CANNON.Vec3();
+  private readonly ballStepStart = new CANNON.Vec3();
 
   constructor(mount: HTMLElement, uiRoot: HTMLElement) {
     this.mount = mount;
@@ -90,11 +99,12 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.mount.appendChild(this.renderer.domElement);
 
-    this.world.addEventListener('beginContact', this.onBeginContact);
+    this.world.addEventListener('beginContact', this.onBeginContactDebug);
     this.bindControls();
 
     window.addEventListener('resize', this.onResize);
     this.onResize();
+    this.ballPrevPosition.copy(this.pendulum.ballBody.position);
     this.rafId = requestAnimationFrame(this.tick);
   }
 
@@ -150,7 +160,40 @@ export class Game {
     this.bindControls();
   }
 
-  private onBeginContact = (event: { bodyA: CANNON.Body; bodyB: CANNON.Body }): void => {
+  private detectAndResolveBallBlockHits(from: CANNON.Vec3, to: CANNON.Vec3): void {
+    if (this.rules.phase !== 'playing') {
+      return;
+    }
+
+    const { ballBody, ballRadius } = this.pendulum;
+    const hits = findBallBlockHits(
+      ballBody,
+      ballRadius,
+      this.blocks,
+      from,
+      to,
+      SWEEP_STEPS,
+    );
+
+    for (const { block, relSpeed } of hits) {
+      applyBallStrikeImpulse(ballBody, block.body);
+      flashHitDebug(block.kind === 'coral' ? 'coral' : 'mint');
+      resolveBallBlockStrike(
+        this.rules,
+        this.blocks,
+        block,
+        relSpeed,
+        (b) => this.breakMintBlock(b),
+        () => this.triggerGameOver(),
+      );
+      if (this.rules.phase !== 'playing') {
+        break;
+      }
+    }
+  }
+
+  /** Cannon beginContact (backup); primary hits use swept sphere vs block each substep. */
+  private onBeginContactDebug = (event: { bodyA: CANNON.Body; bodyB: CANNON.Body }): void => {
     handleBlockContact(
       this.rules,
       event,
@@ -235,7 +278,10 @@ export class Game {
     }
 
     while (this.accumulator >= PHYSICS_STEP) {
+      this.ballStepStart.copy(this.pendulum.ballBody.position);
       this.world.step(PHYSICS_STEP);
+      this.detectAndResolveBallBlockHits(this.ballStepStart, this.pendulum.ballBody.position);
+      this.ballPrevPosition.copy(this.pendulum.ballBody.position);
       this.accumulator -= PHYSICS_STEP;
     }
 
@@ -247,7 +293,7 @@ export class Game {
     cancelAnimationFrame(this.rafId);
     this.unbindControls?.();
     window.removeEventListener('resize', this.onResize);
-    this.world.removeEventListener('beginContact', this.onBeginContact);
+    this.world.removeEventListener('beginContact', this.onBeginContactDebug);
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

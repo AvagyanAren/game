@@ -11,7 +11,8 @@ export type PendulumPhysics = {
 };
 
 const ANCHOR_Y = 9.2;
-const ROPE_LENGTH = 5.4;
+/** Long enough for the ball arc to intersect tower stacks (was 5.4 — cleared above them). */
+const ROPE_LENGTH = 7.45;
 const BALL_RADIUS = 0.72;
 const BALL_MASS = 11;
 
