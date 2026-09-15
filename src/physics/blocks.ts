@@ -29,6 +29,9 @@ const TOWER_LAYOUT: { x: number; kind: BlockKind; layers: number }[] = [
 const PEDESTAL_H = 0.07;
 const PLATFORM_TOP_Y = 0;
 
+const BLOCK_MASK_STACKED =
+  COLLISION_GROUP_STATIC | COLLISION_GROUP_BLOCK;
+
 function createBlockBody(kind: BlockKind, position: CANNON.Vec3, materials: PhysicsMaterials): CANNON.Body {
   const body = new CANNON.Body({
     mass: kind === 'mint' ? 0.62 : 0.72,
@@ -39,11 +42,30 @@ function createBlockBody(kind: BlockKind, position: CANNON.Vec3, materials: Phys
     sleepTimeLimit: 0.4,
     material: materials.block,
     collisionFilterGroup: COLLISION_GROUP_BLOCK,
-    collisionFilterMask: COLLISION_GROUP_STATIC,
+    collisionFilterMask: BLOCK_MASK_STACKED,
+    type: CANNON.Body.STATIC,
   });
   body.addShape(new CANNON.Box(BLOCK_HALF.clone()));
   body.position.copy(position);
   return body;
+}
+
+export function resetBlockToTowerPose(block: BlockEntity): void {
+  const tower = TOWER_LAYOUT[block.towerIndex];
+  const baseY = PLATFORM_TOP_Y + PEDESTAL_H + BLOCK_HALF.y;
+  const y = baseY + block.layer * BLOCK_FULL_Y;
+  block.body.position.set(tower.x, y, 0);
+  block.body.quaternion.set(0, 0, 0, 1);
+  block.body.velocity.set(0, 0, 0);
+  block.body.angularVelocity.set(0, 0, 0);
+}
+
+export function resetAllTowerPoses(blocks: BlockEntity[]): void {
+  for (const block of blocks) {
+    if (block.alive) {
+      resetBlockToTowerPose(block);
+    }
+  }
 }
 
 export function createTowerBlocks(world: CANNON.World, materials: PhysicsMaterials): BlockEntity[] {
@@ -93,16 +115,20 @@ export function getTowerLayout(): typeof TOWER_LAYOUT {
   return TOWER_LAYOUT;
 }
 
+/** Calm start: static upright stacks, block↔block + static; ball off. Play: dynamic + ball. */
 export function setBlocksCollideWithBall(blocks: BlockEntity[], enabled: boolean): void {
   for (const block of blocks) {
     if (!block.alive) {
       continue;
     }
-    block.body.collisionFilterMask = enabled
-      ? COLLISION_GROUP_STATIC | COLLISION_GROUP_BALL
-      : COLLISION_GROUP_STATIC;
-    block.body.velocity.set(0, 0, 0);
-    block.body.angularVelocity.set(0, 0, 0);
-    block.body.wakeUp();
+    if (enabled) {
+      block.body.type = CANNON.Body.DYNAMIC;
+      block.body.collisionFilterMask = BLOCK_MASK_STACKED | COLLISION_GROUP_BALL;
+      block.body.wakeUp();
+    } else {
+      resetBlockToTowerPose(block);
+      block.body.type = CANNON.Body.STATIC;
+      block.body.collisionFilterMask = BLOCK_MASK_STACKED;
+    }
   }
 }

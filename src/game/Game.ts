@@ -13,6 +13,7 @@ import {
 import {
   createPedestalBodies,
   createTowerBlocks,
+  resetAllTowerPoses,
   setBlocksCollideWithBall,
   type BlockEntity,
 } from '../physics/blocks';
@@ -47,6 +48,11 @@ import {
   notifyGameplayStop,
   showGameOverInterstitial,
 } from '../yandex';
+import {
+  buildTowerMetrics,
+  isDebugHarnessEnabled,
+  type MayatnikDebugSnapshot,
+} from './debugApi';
 
 const PHYSICS_STEP = 1 / 240;
 const SWEEP_STEPS = 10;
@@ -112,7 +118,39 @@ export class Game {
     window.addEventListener('resize', this.onResize);
     this.onResize();
     this.ballPrevPosition.copy(this.pendulum.ballBody.position);
+    this.installDebugHarness();
     this.rafId = requestAnimationFrame(this.tick);
+  }
+
+  private installDebugHarness(): void {
+    if (!isDebugHarnessEnabled()) {
+      return;
+    }
+    window.__mayatnik = {
+      snapshot: () => this.getDebugSnapshot(),
+      swing: (direction: -1 | 1) => {
+        if (this.rules.phase === 'playing') {
+          this.armHits();
+          nudgeSwing(this.pendulum, direction);
+        }
+      },
+      restart: () => this.restartRound(),
+    };
+  }
+
+  private getDebugSnapshot(): MayatnikDebugSnapshot {
+    const towers = buildTowerMetrics(this.blocks);
+    const minTowerSpan = towers.length
+      ? Math.min(...towers.map((tower) => tower.heightSpan))
+      : 0;
+    return {
+      phase: this.rules.phase,
+      score: this.rules.score,
+      hitsEnabled: this.rules.hitsEnabled,
+      gameOverVisible: !this.gameOver.root.hidden,
+      towers,
+      minTowerSpan,
+    };
   }
 
   private bindControls(): void {
@@ -148,6 +186,7 @@ export class Game {
     for (const block of this.blocks) {
       this.blockByBody.set(block.body, block);
     }
+    resetAllTowerPoses(this.blocks);
     this.cityView = createCityView(this.blocks);
     this.scene.add(this.cityView.root);
   }
