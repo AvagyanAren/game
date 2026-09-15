@@ -8,6 +8,8 @@ export type RulesState = {
   score: number;
   elapsed: number;
   difficultyLevel: number;
+  /** Mint/coral rules and strike impulses — only after the first swing tap. */
+  hitsEnabled: boolean;
 };
 
 export function createRulesState(): RulesState {
@@ -16,11 +18,12 @@ export function createRulesState(): RulesState {
     score: 0,
     elapsed: 0,
     difficultyLevel: 0,
+    hitsEnabled: false,
   };
 }
 
 export function updateDifficulty(rules: RulesState, delta: number): number {
-  if (rules.phase !== 'playing') {
+  if (rules.phase !== 'playing' || !rules.hitsEnabled) {
     return 1;
   }
   rules.elapsed += delta;
@@ -40,10 +43,12 @@ export function handleBlockContact(
   rules: RulesState,
   event: ContactPayload,
   ballBody: CANNON.Body,
+  blocks: BlockEntity[],
   blockByBody: Map<CANNON.Body, BlockEntity>,
   onMintBreak: (block: BlockEntity) => void,
   onCoralHit: () => void,
-): void {  if (rules.phase !== 'playing') {
+): void {
+  if (rules.phase !== 'playing') {
     return;
   }
 
@@ -64,16 +69,60 @@ export function handleBlockContact(
 
   const relative = new CANNON.Vec3();
   ballBody.velocity.vsub(block.body.velocity, relative);
-  const relSpeed = relative.length();
-  if (relSpeed < 1.4) {
+  resolveBallBlockStrike(
+    rules,
+    blocks,
+    block,
+    strikeSpeedForHit(ballBody, relative.length()),
+    onMintBreak,
+    onCoralHit,
+  );
+}
+
+export function resolveBallBlockStrike(
+  rules: RulesState,
+  blocks: BlockEntity[],
+  block: BlockEntity,
+  relSpeed: number,
+  onMintBreak: (block: BlockEntity) => void,
+  onCoralHit: () => void,
+): void {
+  if (rules.phase !== 'playing' || !rules.hitsEnabled || !block.alive) {
     return;
   }
+
+  wakeTowerBlocks(blocks, block);
+
   if (block.kind === 'coral') {
     onCoralHit();
     return;
   }
 
+  if (relSpeed < 0.35) {
+    return;
+  }
+
   onMintBreak(block);
+}
+
+export function strikeSpeedForHit(ballBody: CANNON.Body, relSpeed: number): number {
+  return Math.max(relSpeed, ballBody.velocity.length());
+}
+
+export function wakeTowerBlocks(blocks: BlockEntity[], struck: BlockEntity): void {
+  for (const block of blocks) {
+    if (!block.alive) {
+      continue;
+    }
+    if (block.towerIndex !== struck.towerIndex) {
+      continue;
+    }
+    block.body.wakeUp();
+    if (block.layer >= struck.layer - 1) {
+      block.body.angularVelocity.x += (Math.random() - 0.5) * 0.6;
+      block.body.angularVelocity.z += (Math.random() - 0.5) * 0.6;
+    }
+  }
 }
 
 export function wakeUpperBlocks(blocks: BlockEntity[], removed: BlockEntity): void {

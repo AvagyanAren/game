@@ -40,5 +40,5 @@ npm run preview
 ## Структура
 
 - `src/game/` — сцена, камера, визуал маятника, ввод
-- `src/physics/` — мир cannon-es и маятник
+- `src/physics/` — cannon-es: SAP broadphase, contact materials, **rope length aligned to towers**, swept sphere↔block hits (240 Гц)
 - `src/ui/` — счёт (pill) и экран конца раунда

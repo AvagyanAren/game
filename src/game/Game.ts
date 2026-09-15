@@ -1,14 +1,22 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { createPhysicsWorld, createPlatformBody } from '../physics/world';
+import type { PhysicsMaterials } from '../physics/materials';
 import {
   createPendulum,
   dampPendulum,
   nudgeSwing,
   resetPendulumState,
+  setBallCollidesWithBlocks,
   setSwingMultiplier,
 } from '../physics/pendulum';
-import { createPedestalBodies, createTowerBlocks, type BlockEntity } from '../physics/blocks';
+import {
+  createPedestalBodies,
+  createTowerBlocks,
+  resetAllTowerPoses,
+  setBlocksCollideWithBall,
+  type BlockEntity,
+} from '../physics/blocks';
 import { createEnvironment, createCamera } from './environment';
 import { createPendulumView, syncPendulumView } from './pendulumView';
 import { bindSwingControls } from './controls';
@@ -16,10 +24,18 @@ import { createCityView, removeBlockMesh, syncCityView, type CityView } from './
 import {
   createRulesState,
   handleBlockContact,
+  resolveBallBlockStrike,
+  strikeSpeedForHit,
   updateDifficulty,
   wakeUpperBlocks,
   type RulesState,
 } from './rules';
+import {
+  applyBallStrikeImpulse,
+  findBallBlockHits,
+  separateBallFromBlock,
+} from '../physics/ballBlockHits';
+import { flashHitDebug } from '../ui/hitFlash';
 import type { GameOverOverlay, ScorePill } from '../ui';
 import {
   createGameOverOverlay,
@@ -34,17 +50,24 @@ import {
   notifyGameplayStop,
   showGameOverInterstitial,
 } from '../yandex';
+import {
+  buildTowerMetrics,
+  isDebugHarnessEnabled,
+  type MayatnikDebugSnapshot,
+} from './debugApi';
 
-const FIXED_STEP = 1 / 60;
-const MAX_SUBSTEPS = 3;
+const PHYSICS_STEP = 1 / 240;
+const SWEEP_STEPS = 18;
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene: THREE.Scene;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly clock = new THREE.Clock();
-  private readonly world = createPhysicsWorld();
-  private readonly pendulum = createPendulum(this.world);
+  private readonly physics = createPhysicsWorld();
+  private readonly world = this.physics.world;
+  private readonly physicsMaterials: PhysicsMaterials = this.physics.materials;
+  private readonly pendulum = createPendulum(this.world, this.physicsMaterials);
   private readonly pendulumView = createPendulumView(this.pendulum);
   private readonly rules: RulesState = createRulesState();
   private readonly scorePill: ScorePill;
@@ -58,6 +81,8 @@ export class Game {
   private rafId = 0;
   private accumulator = 0;
   private bestScore = loadBestScore();
+  private readonly ballPrevPosition = new CANNON.Vec3();
+  private readonly ballStepStart = new CANNON.Vec3();
 
   constructor(mount: HTMLElement, uiRoot: HTMLElement) {
     this.mount = mount;
@@ -73,9 +98,10 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = createCamera();
     createEnvironment(this.scene);
-    this.world.addBody(createPlatformBody());
+    this.world.addBody(createPlatformBody(this.physicsMaterials));
     this.scene.add(this.pendulumView.root);
     this.spawnCity();
+    this.disarmHits();
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -88,12 +114,45 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.mount.appendChild(this.renderer.domElement);
 
-    this.world.addEventListener('beginContact', this.onBeginContact);
+    this.world.addEventListener('beginContact', this.onBeginContactDebug);
     this.bindControls();
 
     window.addEventListener('resize', this.onResize);
     this.onResize();
+    this.ballPrevPosition.copy(this.pendulum.ballBody.position);
+    this.installDebugHarness();
     this.rafId = requestAnimationFrame(this.tick);
+  }
+
+  private installDebugHarness(): void {
+    if (!isDebugHarnessEnabled()) {
+      return;
+    }
+    window.__mayatnik = {
+      snapshot: () => this.getDebugSnapshot(),
+      swing: (direction: -1 | 1) => {
+        if (this.rules.phase === 'playing') {
+          this.armHits();
+          nudgeSwing(this.pendulum, direction);
+        }
+      },
+      restart: () => this.restartRound(),
+    };
+  }
+
+  private getDebugSnapshot(): MayatnikDebugSnapshot {
+    const towers = buildTowerMetrics(this.blocks);
+    const minTowerSpan = towers.length
+      ? Math.min(...towers.map((tower) => tower.heightSpan))
+      : 0;
+    return {
+      phase: this.rules.phase,
+      score: this.rules.score,
+      hitsEnabled: this.rules.hitsEnabled,
+      gameOverVisible: !this.gameOver.root.hidden,
+      towers,
+      minTowerSpan,
+    };
   }
 
   private bindControls(): void {
@@ -102,17 +161,34 @@ export class Game {
       if (this.rules.phase !== 'playing') {
         return;
       }
+      this.armHits();
       nudgeSwing(this.pendulum, direction);
     });
   }
 
+  private disarmHits(): void {
+    this.rules.hitsEnabled = false;
+    setBallCollidesWithBlocks(this.pendulum, false);
+    setBlocksCollideWithBall(this.blocks, false);
+  }
+
+  private armHits(): void {
+    if (this.rules.hitsEnabled) {
+      return;
+    }
+    this.rules.hitsEnabled = true;
+    setBallCollidesWithBlocks(this.pendulum, true);
+    setBlocksCollideWithBall(this.blocks, true);
+  }
+
   private spawnCity(): void {
-    this.blocks = createTowerBlocks(this.world);
-    this.pedestalBodies = createPedestalBodies(this.world);
+    this.blocks = createTowerBlocks(this.world, this.physicsMaterials);
+    this.pedestalBodies = createPedestalBodies(this.world, this.physicsMaterials);
     this.blockByBody.clear();
     for (const block of this.blocks) {
       this.blockByBody.set(block.body, block);
     }
+    resetAllTowerPoses(this.blocks);
     this.cityView = createCityView(this.blocks);
     this.scene.add(this.cityView.root);
   }
@@ -140,19 +216,60 @@ export class Game {
     notifyGameplayStart();
     Object.assign(this.rules, createRulesState());
     setSwingMultiplier(1);
-    resetPendulumState(this.pendulum, this.world);
+    resetPendulumState(this.pendulum, this.world, this.physicsMaterials);
     this.clearCity();
     this.spawnCity();
+    this.disarmHits();
+    this.ballPrevPosition.copy(this.pendulum.ballBody.position);
+    this.accumulator = 0;
     this.scorePill.setScore(0);
     this.scorePill.root.hidden = false;
     this.bindControls();
   }
 
-  private onBeginContact = (event: { bodyA: CANNON.Body; bodyB: CANNON.Body }): void => {
+  private detectAndResolveBallBlockHits(from: CANNON.Vec3, to: CANNON.Vec3): void {
+    if (this.rules.phase !== 'playing' || !this.rules.hitsEnabled) {
+      return;
+    }
+
+    const { ballBody, ballRadius } = this.pendulum;
+    const hits = findBallBlockHits(
+      ballBody,
+      ballRadius,
+      this.blocks,
+      from,
+      to,
+      SWEEP_STEPS,
+    );
+
+    for (const { block, relSpeed } of hits) {
+      separateBallFromBlock(ballBody, ballRadius, block.body);
+      applyBallStrikeImpulse(ballBody, block.body);
+      flashHitDebug(block.kind === 'coral' ? 'coral' : 'mint');
+      resolveBallBlockStrike(
+        this.rules,
+        this.blocks,
+        block,
+        strikeSpeedForHit(ballBody, relSpeed),
+        (b) => this.breakMintBlock(b),
+        () => this.triggerGameOver(),
+      );
+      if (this.rules.phase !== 'playing') {
+        break;
+      }
+    }
+  }
+
+  /** Cannon beginContact (backup); primary hits use swept sphere vs block each substep. */
+  private onBeginContactDebug = (event: { bodyA: CANNON.Body; bodyB: CANNON.Body }): void => {
+    if (!this.rules.hitsEnabled) {
+      return;
+    }
     handleBlockContact(
       this.rules,
       event,
       this.pendulum.ballBody,
+      this.blocks,
       this.blockByBody,
       (block) => this.breakMintBlock(block),
       () => this.triggerGameOver(),
@@ -231,9 +348,12 @@ export class Game {
       dampPendulum(this.pendulum);
     }
 
-    while (this.accumulator >= FIXED_STEP) {
-      this.world.step(FIXED_STEP, FIXED_STEP, MAX_SUBSTEPS);
-      this.accumulator -= FIXED_STEP;
+    while (this.accumulator >= PHYSICS_STEP) {
+      this.ballStepStart.copy(this.pendulum.ballBody.position);
+      this.world.step(PHYSICS_STEP);
+      this.detectAndResolveBallBlockHits(this.ballStepStart, this.pendulum.ballBody.position);
+      this.ballPrevPosition.copy(this.pendulum.ballBody.position);
+      this.accumulator -= PHYSICS_STEP;
     }
 
     this.syncScene();
@@ -244,7 +364,7 @@ export class Game {
     cancelAnimationFrame(this.rafId);
     this.unbindControls?.();
     window.removeEventListener('resize', this.onResize);
-    this.world.removeEventListener('beginContact', this.onBeginContact);
+    this.world.removeEventListener('beginContact', this.onBeginContactDebug);
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
