@@ -41,6 +41,10 @@ export class TowerGame {
   private pointerTracking = false;
   private shapes: ShapeState[] = [];
   private bullets: Bullet[] = [];
+  /** Logical playfield size in CSS pixels (matches the 2D context after DPR transform). */
+  private playfieldCssWidth = 0;
+  private playfieldCssHeight = 0;
+
   constructor(mount: HTMLElement, uiRoot: HTMLElement) {
     this.mount = mount;
     this.hud = createTowerHud(uiRoot);
@@ -142,8 +146,8 @@ export class TowerGame {
 
   private getPlayfieldSize(): { width: number; height: number } {
     return {
-      width: this.canvas.width,
-      height: this.canvas.height,
+      width: this.playfieldCssWidth,
+      height: this.playfieldCssHeight,
     };
   }
 
@@ -376,6 +380,8 @@ export class TowerGame {
     const dpr = Math.min(window.devicePixelRatio, 2);
     const w = this.mount.clientWidth;
     const h = this.mount.clientHeight;
+    this.playfieldCssWidth = w;
+    this.playfieldCssHeight = h;
     this.canvas.width = Math.floor(w * dpr);
     this.canvas.height = Math.floor(h * dpr);
     this.canvas.style.width = `${w}px`;
