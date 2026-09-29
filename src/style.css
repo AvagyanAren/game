@@ -13,12 +13,13 @@ body {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  background: #3eb5ff;
+  background: #0f172a;
 }
 
 #app {
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
 canvas {
@@ -35,43 +36,69 @@ canvas {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-.score-pill[hidden] {
+.tower-hud[hidden] {
   display: none;
 }
 
-.score-pill {
+.tower-hud {
   position: absolute;
   top: max(12px, env(safe-area-inset-top, 12px));
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
+  left: max(12px, env(safe-area-inset-left, 12px));
+  right: max(12px, env(safe-area-inset-right, 12px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #e2e8f0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  max-width: 280px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.tower-hud__tower {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tower-hud__label {
+  opacity: 0.85;
+}
+
+.tower-hud__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.tower-hud__shapes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tower-hud__shape {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 1rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 6px 20px rgba(20, 40, 70, 0.12);
-  color: #4a5568;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  gap: 8px;
 }
 
-.score-pill__label {
-  opacity: 0.75;
+.tower-hud__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
-.score-pill__value {
-  color: #2d3748;
-  min-width: 1.5ch;
-  text-align: right;
-}
-
-.game-over[hidden] {
+.tower-game-over[hidden] {
   display: none;
 }
 
-.game-over {
+.tower-game-over {
   position: absolute;
   inset: 0;
   display: flex;
@@ -80,53 +107,41 @@ canvas {
   justify-content: space-between;
   padding: max(18px, env(safe-area-inset-top, 18px)) 16px
     max(22px, env(safe-area-inset-bottom, 22px));
-  background: linear-gradient(
-    180deg,
-    rgba(12, 24, 40, 0.18) 0%,
-    rgba(12, 24, 40, 0.34) 55%,
-    rgba(12, 24, 40, 0.42) 100%
-  );
+  background: rgba(15, 23, 42, 0.88);
   pointer-events: auto;
 }
 
-.game-over__header {
+.tower-game-over__header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  margin-top: 4vh;
+  gap: 0.5rem;
+  margin-top: 8vh;
+  text-align: center;
 }
 
-.game-over__title {
+.tower-game-over__hp {
   margin: 0;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.game-over__score {
-  margin: 0;
-  color: #fff;
-  font-size: clamp(2.75rem, 14vw, 4rem);
+  color: #f8fafc;
+  font-size: clamp(2.5rem, 12vw, 3.5rem);
   font-weight: 800;
   line-height: 1;
 }
 
-.game-over__best {
-  margin: 0.15rem 0 0;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.92rem;
+.tower-game-over__killer {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.92);
+  font-size: 1.05rem;
   font-weight: 600;
 }
 
-.game-over__actions {
+.tower-game-over__actions {
   display: flex;
   width: min(92vw, 440px);
   gap: 12px;
 }
 
-.game-over__btn {
+.tower-game-over__btn {
   pointer-events: auto;
   flex: 1 1 0;
   min-height: 52px;
@@ -138,30 +153,26 @@ canvas {
   cursor: pointer;
 }
 
-.game-over__btn--again {
-  background: #f67262;
-  color: #fff;
+.tower-game-over__btn--again {
+  background: #38bdf8;
+  color: #0f172a;
 }
 
-.game-over__btn--share {
-  background: rgba(255, 255, 255, 0.96);
-  color: #e85f4f;
-  box-shadow: 0 6px 20px rgba(20, 40, 70, 0.12);
+.tower-game-over__btn--share {
+  background: rgba(248, 250, 252, 0.96);
+  color: #0f172a;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
 }
 
-.game-over__btn:focus-visible {
-  outline: 3px solid #fff;
+.tower-game-over__btn:focus-visible {
+  outline: 3px solid #38bdf8;
   outline-offset: 2px;
-}
-
-.game-over__btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 .ui-toast {
   position: absolute;
-  left: 50%;  bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px));
+  left: 50%;
+  bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 96px));
   transform: translateX(-50%);
   padding: 0.65rem 1rem;
   border-radius: 999px;
